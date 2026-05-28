@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AeroConnect Routing System: Warshall's Algorithm</title>
+    <style>
+        :root {
+            --bg-color: #000000;
+            --container-bg: #1e1e1e;
+            --primary: #0984e3;
+            --primary-hover: #74b9ff;
+            --text-main: #f8f9fa;
+            --text-muted: #b2bec3;
+            --node-stroke: #0984e3;
+            --edge-solid: #dfe6e9;
+            --edge-dashed: #00b894;
+            --highlight-eval: #b38500;
+            --highlight-found: #00b894; 
+            --highlight-target: #4a4a4a; 
+            --glow-k: #fdcb6e; 
+            --color-start: #00b894; 
+            --color-end: #d63031; 
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 { margin-top: 0; margin-bottom: 5px; color: var(--primary); text-align: center; }
+        p.subtitle { margin-top: 0; margin-bottom: 15px; color: var(--text-muted); text-align: center; }
+
+        /* Settings Panel for Sliders */
+        .settings-panel {
+            display: flex;
+            gap: 30px;
+            background: #2d3436;
+            padding: 15px 30px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border: 1px solid #4a4a4a;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .settings-panel label {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
+        .settings-panel input[type="range"] {
+            cursor: pointer;
+            accent-color: var(--primary);
+        }
+
+        #main-container {
+            display: flex;
+            width: 100%;
+            max-width: 1000px;
+            gap: 30px;
+            background: var(--container-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            flex-wrap: wrap;
+        }
+
+        .panel {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .panel h2 { font-size: 1.2rem; margin-bottom: 15px; color: var(--text-main); }
+
+        /* SVG Graph Styling */
+        svg {
+            width: 100%;
+            max-width: 400px;
+            height: 400px;
+            background: #2d3436;
+            border: 2px solid #4a4a4a;
+            border-radius: 8px;
+        }
+
+        .node circle {
+            fill: #000000;
+            stroke: var(--node-stroke);
+            stroke-width: 3;
+            transition: all 0.3s ease;
+        }
+
+        .node text {
+            fill: #ffffff;
+            font-weight: bold;
+            font-size: 18px;
+            font-family: sans-serif;
+            text-anchor: middle;
+            dominant-baseline: central;
+        }
+
+        .node.glow-k circle { stroke: var(--glow-k); stroke-width: 4; filter: drop-shadow(0 0 10px var(--glow-k)); }
+        .node.origin-i circle { stroke: var(--color-start); stroke-width: 4; fill: #0d2b24; }
+        .node.dest-j circle { stroke: var(--color-end); stroke-width: 4; fill: #3b1717; }
+
+        .edge-initial { stroke: var(--edge-solid); stroke-width: 2.5; fill: none; }
+        .edge-dashed {
+            stroke: var(--edge-dashed); stroke-width: 3; fill: none; stroke-dasharray: 8 6;
+            animation: dash 1s linear infinite;
+        }
+        @keyframes dash { to { stroke-dashoffset: -14; } }
+
+        /* Matrix Styling */
+        table {
+            border-collapse: collapse;
+            font-size: 1.3rem;
+            margin-top: 10px;
+            background-color: #ffffff;
+            color: #2d3436;
+        }
+
+        th, td {
+            border: 2px solid #cbd5e1;
+            width: 50px;
+            height: 50px;
+            text-align: center;
+            vertical-align: middle;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+
+        th { background: #f1f5f9; color: #636e72; font-weight: bold; }
+        .cell-eval { background-color: var(--highlight-eval); }
+        .cell-target { background-color: var(--highlight-target); color: #ffffff; }
+        .cell-found { 
+            background-color: var(--highlight-found); 
+            color: #000000; 
+            font-weight: bold; 
+            transform: scale(1.05); 
+        }
+
+        /* Controls Section */
+        .controls {
+            margin-top: 25px; display: flex; gap: 12px; justify-content: center; width: 100%; max-width: 1000px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 20px; font-size: 1rem; font-weight: bold; cursor: pointer;
+            border: none; border-radius: 6px; background: var(--primary); color: white;
+            transition: background 0.2s, transform 0.1s; display: flex; align-items: center; gap: 8px;
+        }
+        button:hover:not(:disabled) { background: var(--primary-hover); transform: translateY(-1px); }
+        button:active:not(:disabled) { transform: translateY(1px); }
+        button:disabled { background: #636e72; color: #b2bec3; cursor: not-allowed; transform: none; }
+
+        /* Dynamic Info Box & Math Panel */
+        #info-box {
+            margin-top: 25px; padding: 20px; width: 100%; max-width: 960px;
+            background: #2c2505; border-left: 6px solid #ffc107; border-radius: 8px;
+            font-size: 1.15rem; line-height: 1.6; color: #ffeaa7; white-space: pre-line;
+        }
+        .status-header { font-weight: bold; font-size: 1.25rem; margin-bottom: 8px; display: block; color: #ffc107; }
+        
+        .math-trace {
+            font-family: monospace; font-size: 1.15em; margin-top: 15px; 
+            background: #111; padding: 15px; border-radius: 6px; border: 1px solid #4a4a4a;
+            white-space: pre-wrap; color: #a29bfe;
+        }
+
+        /* Result List Grid */
+        .result-grid {
+            background: #111; padding: 15px; border-radius: 6px; margin-top: 12px; 
+            border: 1px solid #4a4a4a; color: #fff; display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;
+            font-family: monospace; font-size: 1.1rem; white-space: normal;
+        }
+
+        /* Conclusion Section Styles */
+        .conclusion-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 193, 7, 0.3);
+        }
+        
+        .conclusion-section h3 {
+            color: #a29bfe;
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.15rem;
+        }
+
+        .conclusion-section ul {
+            margin-top: 5px;
+            margin-bottom: 15px;
+            padding-left: 20px;
+        }
+
+        .conclusion-section li {
+            margin-bottom: 6px;
+        }
+
+        /* Route Checker UI */
+        .route-checker {
+            margin-top: 25px; padding: 20px; width: 100%; max-width: 960px;
+            background: #2d3436; border: 2px solid #4a4a4a; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; gap: 20px;
+            flex-wrap: wrap;
+        }
+        .route-checker select { padding: 8px; font-size: 1rem; border-radius: 4px; border: 1px solid #ccc; background: #fff; color: #000; }
+        .route-checker span { font-weight: bold; color: var(--text-main); }
+        #checker-result { font-weight: bold; margin-left: 15px; font-size: 1.1rem; }
+        .result-yes { color: var(--color-start); }
+        .result-no { color: var(--color-end); }
+
+    </style>
+</head>
+<body>
+
+    <h1>AeroConnect Routing System</h1>
+    <p class="subtitle">Interactive Transitive Closure via Warshall's Algorithm</p>
+
+    <div class="settings-panel">
+        <label>
+            Number of Cities: 
+            <input type="range" id="city-slider" min="3" max="6" value="4" onchange="updateCityCount()">
+            <span id="city-val">4</span>
+        </label>
+        <label>
+            Playback Speed: 
+            <input type="range" id="speed-slider" min="1" max="10" value="5" oninput="updateSpeed()">
+            <span id="speed-val">Medium</span>
+        </label>
+    </div>
+
+    <div id="main-container">
+        <div class="panel">
+            <h2>Flight Network Map</h2>
+            <svg id="graph">
+                <defs>
+                    <marker id="arrow-solid" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#dfe6e9" />
+                    </marker>
+                    <marker id="arrow-dashed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#00b894" />
+                    </marker>
+                </defs>
+                <g id="edges"></g>
+                <g id="nodes"></g>
+            </svg>
+        </div>
+
+        <div class="panel">
+            <h2>Reachability Matrix</h2>
+            <table id="matrix">
+                <thead>
+                    <tr id="matrix-header"></tr>
+                </thead>
+                <tbody id="matrix-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="info-box">
+        <span class="status-header">Initialization</span>
+        Welcome to AeroConnect's routing analyzer. 
+        Click "Play" or "Step Forward" to trace the mathematical logic of the connections!
+    </div>
+
+    <div class="controls">
+        <button id="play-btn" onclick="play()">▶ Play</button>
+        <button id="pause-btn" onclick="pause()" disabled>⏸ Pause</button>
+        <button id="step-btn" onclick="step()">⏭ Step Forward</button>
+        <button id="reset-btn" onclick="init()">🔄 Reset</button>
+    </div>
+
+    <div class="route-checker">
+        <span>Check Route Availability:</span>
+        <label>Start: <select id="user-start"></select></label>
+        <label>End: <select id="user-end"></select></label>
+        <button onclick="checkUserRoute()">Check Matrix</button>
+        <div id="checker-result"></div>
+    </div>
+
+    <script>
+        const allCities = ['A', 'B', 'C', 'D', 'E', 'F'];
+        
+        // State Variables
+        let numCities = 4;
+        let nodesData = [];
+        let originalMatrix = [];
+        let matrix = [];
+        let k = 0, i = 0, j = 0;
+        let isPlaying = false;
+        let intervalTimer = null;
+        let speedMs = 800; 
+
+        // DOM Elements
+        const edgesGroup = document.getElementById('edges');
+        const nodesGroup = document.getElementById('nodes');
+        const matrixHeader = document.getElementById('matrix-header');
+        const matrixBody = document.getElementById('matrix-body');
+        const infoBox = document.getElementById('info-box');
+        const playBtn = document.getElementById('play-btn');
+        const pauseBtn = document.getElementById('pause-btn');
+        const stepBtn = document.getElementById('step-btn');
+        const checkerResult = document.getElementById('checker-result');
+        const startSelect = document.getElementById('user-start');
+        const endSelect = document.getElementById('user-end');
+
+        // --- Core Functions ---
+
+        function updateSpeed() {
+            const sliderVal = document.getElementById('speed-slider').value;
+            speedMs = 2200 - (sliderVal * 200); 
+            
+            let label = "Medium";
+            if (sliderVal <= 3) label = "🐢 Slow";
+            else if (sliderVal >= 8) label = "🚀 Fast";
+            document.getElementById('speed-val').textContent = label;
+
+            if (isPlaying) {
+                pause(); play();
+            }
+        }
+
+        function updateCityCount() {
+            numCities = parseInt(document.getElementById('city-slider').value);
+            document.getElementById('city-val').textContent = numCities;
+            init();
+        }
+
+        function generateData() {
+            // Generate Node Coordinates
+            nodesData = [];
+            const cx = 200, cy = 200, radius = 130;
+            for (let c = 0; c < numCities; c++) {
+                let angle = (c / numCities) * (2 * Math.PI) - (Math.PI / 2);
+                nodesData.push({
+                    id: c, label: allCities[c],
+                    x: cx + radius * Math.cos(angle),
+                    y: cy + radius * Math.sin(angle)
+                });
+            }
+
+            // Generate Initial Matrix
+            originalMatrix = Array(numCities).fill(0).map(() => Array(numCities).fill(0));
+            
+            if (numCities === 4) {
+                originalMatrix = [[0,1,0,0], [0,0,1,0], [1,0,0,1], [0,0,0,0]];
+            } else {
+                for (let c = 0; c < numCities; c++) {
+                    originalMatrix[c][(c + 1) % numCities] = 1; 
+                    if (Math.random() > 0.5) { 
+                        let target = Math.floor(Math.random() * numCities);
+                        if (target !== c) originalMatrix[c][target] = 1;
+                    }
+                }
+            }
+        }
+
+        function init() {
+            pause();
+            generateData();
+            
+            matrix = originalMatrix.map(row => [...row]);
+            k = 0; i = 0; j = 0;
+            checkerResult.innerHTML = ''; 
+            
+            renderGraph();
+            renderMatrix();
+            populateDropdowns();
+            
+            playBtn.disabled = false;
+            stepBtn.disabled = false;
+            
+            infoBox.innerHTML = `<span class="status-header">Initialization</span>
+            Matrix built for ${numCities} cities. 
+            Click "Play" or "Step Forward" to evaluate the connections mathematically!`;
+        }
+
+        function renderGraph() {
+            edgesGroup.innerHTML = '';
+            nodesGroup.innerHTML = '';
+
+            for (let r = 0; r < numCities; r++) {
+                for (let c = 0; c < numCities; c++) {
+                    if (originalMatrix[r][c] === 1) drawEdge(r, c, false);
+                }
+            }
+
+            nodesData.forEach(n => {
+                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                g.setAttribute("class", "node");
+                g.id = `node-${n.id}`;
+
+                const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                circle.setAttribute("cx", n.x); circle.setAttribute("cy", n.y); circle.setAttribute("r", 25);
+
+                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                text.setAttribute("x", n.x); text.setAttribute("y", n.y); text.textContent = n.label;
+
+                g.appendChild(circle); g.appendChild(text); nodesGroup.appendChild(g);
+            });
+        }
+
+        function drawEdge(fromIdx, toIdx, isDashed) {
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", getPathCoordinates(fromIdx, toIdx));
+            
+            if (isDashed) {
+                path.setAttribute("class", "edge-dashed");
+                path.setAttribute("marker-end", "url(#arrow-dashed)");
+                path.id = `edge-${fromIdx}-${toIdx}`;
+            } else {
+                path.setAttribute("class", "edge-initial");
+                path.setAttribute("marker-end", "url(#arrow-solid)");
+            }
+            edgesGroup.appendChild(path);
+        }
+
+        function getPathCoordinates(fromIdx, toIdx) {
+            const n1 = nodesData[fromIdx]; const n2 = nodesData[toIdx];
+
+            if (fromIdx === toIdx) return `M ${n1.x + 15} ${n1.y - 20} A 20 20 0 1 1 ${n1.x - 15} ${n1.y - 20}`;
+
+            const dx = n2.x - n1.x; const dy = n2.y - n1.y;
+            const angle = Math.atan2(dy, dx);
+            const totalRadius = 30; 
+
+            const startX = n1.x + Math.cos(angle) * totalRadius; const startY = n1.y + Math.sin(angle) * totalRadius;
+            const endX = n2.x - Math.cos(angle) * totalRadius; const endY = n2.y - Math.sin(angle) * totalRadius;
+
+            const curveOffset = 30; 
+            const midX = (startX + endX) / 2 - Math.sin(angle) * curveOffset;
+            const midY = (startY + endY) / 2 + Math.cos(angle) * curveOffset;
+
+            return `M ${startX} ${startY} Q ${midX} ${midY} ${endX} ${endY}`;
+        }
+
+        function renderMatrix() {
+            matrixHeader.innerHTML = '<th></th>';
+            for (let c = 0; c < numCities; c++) {
+                matrixHeader.innerHTML += `<th>${allCities[c]}</th>`;
+            }
+
+            matrixBody.innerHTML = '';
+            for (let r = 0; r < numCities; r++) {
+                let tr = document.createElement('tr');
+                tr.innerHTML = `<th>${allCities[r]}</th>`;
+                for (let c = 0; c < numCities; c++) {
+                    tr.innerHTML += `<td id="cell-${r}-${c}">${matrix[r][c]}</td>`;
+                }
+                matrixBody.appendChild(tr);
+            }
+        }
+
+        function populateDropdowns() {
+            startSelect.innerHTML = ''; endSelect.innerHTML = '';
+            for (let c = 0; c < numCities; c++) {
+                startSelect.innerHTML += `<option value="${c}">City ${allCities[c]}</option>`;
+                endSelect.innerHTML += `<option value="${c}">City ${allCities[c]}</option>`;
+            }
+            endSelect.value = numCities - 1; 
+        }
+
+        function clearHighlights() {
+            document.querySelectorAll('.cell-eval, .cell-target, .cell-found').forEach(el => el.className = '');
+            document.querySelectorAll('.node').forEach(el => el.classList.remove('glow-k', 'origin-i', 'dest-j'));
+        }
+
+        function step() {
+            // --- NEW: COMPREHENSIVE ALGORITHM EXPLANATION ---
+            if (k >= numCities) {
+                pause();
+                
+                // Collect newly discovered routes
+                let newRoutes = [];
+                for (let r = 0; r < numCities; r++) {
+                    for (let c = 0; c < numCities; c++) {
+                        if (r !== c && matrix[r][c] === 1 && originalMatrix[r][c] === 0) {
+                            newRoutes.push(`${allCities[r]} &rarr; ${allCities[c]}`);
+                        }
+                    }
+                }
+
+                let finalMsg = `Warshall's Algorithm has finished checking all combinations. The matrix has been successfully updated.\n`;
+                
+                finalMsg += `<div class="conclusion-section">`;
+                finalMsg += `<h3>1. What exactly is Transitive Closure?</h3>`;
+                finalMsg += `In graph theory, the <strong>Transitive Closure</strong> translates a network of strictly <em>direct connections</em> into a complete map of <em>all possible reachability</em>. Mathematically, if a relation exists from <strong>A to B</strong>, and from <strong>B to C</strong>, the transitive property dictates that a path exists from <strong>A to C</strong>. The final matrix displays a '1' if a destination is reachable via any combination of layovers.`;
+                finalMsg += `</div>`;
+
+                finalMsg += `<div class="conclusion-section">`;
+                finalMsg += `<h3>2. The Power of Warshall's Approach</h3>`;
+                finalMsg += `Rather than manually tracing flight paths like a maze (which is slow for dense networks), Warshall’s Algorithm uses <strong>Dynamic Programming</strong>. By systematically evaluating every city as a potential "layover" using fast boolean logic (AND/OR operations), it calculates the entire network's connectivity simultaneously in <strong>O(V³)</strong> time.`;
+                finalMsg += `</div>`;
+
+                finalMsg += `<div class="conclusion-section">`;
+                finalMsg += `<h3>3. Beyond Airline Routing</h3>`;
+                finalMsg += `This mathematical concept is foundational across computer science:`;
+                finalMsg += `<ul>`;
+                finalMsg += `<li><strong>Epidemiology:</strong> Mapping the ultimate spread of a virus through a chain of contacts.</li>`;
+                finalMsg += `<li><strong>Software Compilers:</strong> Resolving deep module dependencies before compiling code.</li>`;
+                finalMsg += `<li><strong>IT Networks:</strong> Preventing isolated "island" subnets in global routing tables.</li>`;
+                finalMsg += `<li><strong>Databases:</strong> Querying hierarchical data, like finding all employees under a CEO.</li>`;
+                finalMsg += `</ul>`;
+                finalMsg += `</div>`;
+                
+                finalMsg += `<div class="conclusion-section">`;
+                finalMsg += `<h3>4. Outcome of this Simulation</h3>`;
+                if (newRoutes.length > 0) {
+                    finalMsg += `By applying the transitive property to our initial direct flights, the algorithm successfully deduced <strong>${newRoutes.length} new indirect routes:</strong>`;
+                    finalMsg += `<div class="result-grid">`;
+                    newRoutes.forEach(route => {
+                        finalMsg += `<span>${route}</span>`;
+                    });
+                    finalMsg += `</div>\n`;
+                } else {
+                    finalMsg += `<span style="color:var(--text-muted)">No additional indirect routes could be formed from the initial network.</span>\n\n`;
+                }
+                finalMsg += `</div>`;
+                
+                finalMsg += `\n<strong style="color:var(--primary-hover)">You can now use the Route Checker below to query specific paths!</strong>`;
+
+                infoBox.innerHTML = `<span class="status-header" style="color:var(--highlight-found); font-size: 1.5rem; text-align: center; margin-bottom: 20px;">Algorithm Complete! 🎉</span>${finalMsg}`;
+                
+                playBtn.disabled = true; stepBtn.disabled = true;
+                clearHighlights(); return;
+            }
+            // -----------------------------------------
+
+            clearHighlights();
+            checkerResult.innerHTML = ''; 
+
+            // Highlight Map Nodes
+            document.getElementById(`node-${i}`).classList.add('origin-i');
+            document.getElementById(`node-${j}`).classList.add('dest-j');
+            document.getElementById(`node-${k}`).classList.add('glow-k');
+
+            // Highlight Matrix Cells
+            document.getElementById(`cell-${i}-${k}`).classList.add('cell-eval');
+            document.getElementById(`cell-${k}-${j}`).classList.add('cell-eval');
+            const cellIJ = document.getElementById(`cell-${i}-${j}`);
+            cellIJ.classList.add('cell-target');
+
+            // Retrieve Data
+            let val_ij = matrix[i][j];
+            let val_ik = matrix[i][k];
+            let val_kj = matrix[k][j];
+
+            // Build Math Explanation trace
+            let title = `Step: Layover k = ${allCities[k]} | Evaluate [${allCities[i]} &rarr; ${allCities[j]}]`;
+            
+            let mathTrace = `<div class="math-trace">`;
+            mathTrace += `// Boolean Reachability Update Equation:\n`;
+            mathTrace += `<span style="color:#fff">R[${allCities[i]}][${allCities[j]}]</span> = R[${allCities[i]}][${allCities[j]}] &or; ( R[${allCities[i]}][${allCities[k]}] &and; R[${allCities[k]}][${allCities[j]}] )\n`;
+            mathTrace += `<span style="color:#fff">R[${allCities[i]}][${allCities[j]}]</span> = ${val_ij} &or; ( ${val_ik} &and; ${val_kj} )\n\n`;
+
+            if (val_ik === 1 && val_kj === 1) {
+                if (val_ij === 0) {
+                    matrix[i][j] = 1; 
+                    cellIJ.textContent = '1'; 
+                    cellIJ.classList.remove('cell-target');
+                    cellIJ.classList.add('cell-found');
+                    drawEdge(i, j, true);
+                    mathTrace += `&rarr; <span style="color:var(--highlight-found)">Result: 0 &or; 1 = 1 (NEW ROUTE DISCOVERED!)</span>`;
+                } else {
+                    mathTrace += `&rarr; <span style="color:var(--text-muted)">Result: 1 &or; 1 = 1 (Route already exists)</span>`;
+                }
+            } else {
+                mathTrace += `&rarr; <span style="color:var(--color-end)">Result: ${val_ij} &or; 0 = ${val_ij} (No change)</span>`;
+            }
+            mathTrace += `</div>`;
+
+            infoBox.innerHTML = `<span class="status-header">${title}</span>${mathTrace}`;
+
+            // Increment nested loops
+            j++;
+            if (j >= numCities) {
+                j = 0; i++;
+                if (i >= numCities) { i = 0; k++; }
+            }
+        }
+
+        function checkUserRoute() {
+            const startIdx = parseInt(document.getElementById('user-start').value);
+            const endIdx = parseInt(document.getElementById('user-end').value);
+            
+            clearHighlights();
+            document.getElementById(`node-${startIdx}`).classList.add('origin-i');
+            document.getElementById(`node-${endIdx}`).classList.add('dest-j');
+            
+            const targetCell = document.getElementById(`cell-${startIdx}-${endIdx}`);
+            
+            if (matrix[startIdx][endIdx] === 1) {
+                targetCell.classList.add('cell-found');
+                checkerResult.innerHTML = `<span class="result-yes">✔ Yes! A route exists from City ${allCities[startIdx]} to City ${allCities[endIdx]}.</span>`;
+            } else {
+                targetCell.classList.add('cell-target');
+                checkerResult.innerHTML = `<span class="result-no">✖ No route exists from City ${allCities[startIdx]} to City ${allCities[endIdx]}.</span>`;
+            }
+        }
+
+        function play() {
+            if (k >= numCities) return;
+            isPlaying = true;
+            playBtn.disabled = true; stepBtn.disabled = true; pauseBtn.disabled = false;
+            
+            step(); 
+            intervalTimer = setInterval(() => { if(isPlaying) step(); }, speedMs);
+        }
+
+        function pause() {
+            isPlaying = false;
+            clearInterval(intervalTimer);
+            if (k < numCities) { playBtn.disabled = false; stepBtn.disabled = false; }
+            pauseBtn.disabled = true;
+        }
+
+        window.onload = () => {
+            updateSpeed(); 
+            init();        
+        };
+
+    </script>
+</body>
+</html>
